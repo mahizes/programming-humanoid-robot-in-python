@@ -19,10 +19,14 @@ class MyAgent(SparkAgent):
     def think(self, perception):
         angle = 0
         temperature = 0
-        # YOUR CODE HERE
         # get angle and temperature to current data of joint HeadYaw
+        angle = perception.joint.get('HeadYaw')
+        temperature = perception.joint_temperature.get('HeadYaw')
 
-        print('HeadYaw angle: ' + str(angle) + ' temperature: ' + str(temperature))
+        if angle is None or temperature is None:
+            print('HeadYaw data not available yet')
+        else:
+            print('HeadYaw angle: ' + str(angle) + ' temperature: ' + str(temperature))
         return super(MyAgent, self).think(perception)
 
 if '__main__' == __name__:
