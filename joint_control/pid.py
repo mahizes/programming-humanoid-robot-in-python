@@ -30,29 +30,66 @@ class PIDController(object):
         @param delay: delay in number of steps
         '''
         self.dt = dt
+        # control signal (joint speeds)
         self.u = np.zeros(size)
+        # previous errors e[k-1], e[k-2] for incremental PID
         self.e1 = np.zeros(size)
         self.e2 = np.zeros(size)
-        # ADJUST PARAMETERS BELOW
+        # ADJUST PARAMETERS BELOW (reasonable defaults, can be tuned in pid_test.ipynb)
         delay = 0
-        self.Kp = 0
-        self.Ki = 0
-        self.Kd = 0
-        self.y = deque(np.zeros(size), maxlen=delay + 1)
+        self.delay = delay
+        # PID gains tuned via pid_test.ipynb
+        self.Kp = 10.0
+        self.Ki = 0.0
+        self.Kd = 0.2
+        # buffer for predicted joint angles; store one numpy array per time step
+        self.y = deque([np.zeros(size)], maxlen=delay + 1)
 
     def set_delay(self, delay):
         '''
         @param delay: delay in number of steps
         '''
-        self.y = deque(self.y, delay + 1)
+        self.delay = delay
+        # keep the latest prediction (or zeros) and resize the buffer
+        last = self.y[-1] if len(self.y) > 0 else np.zeros_like(self.u)
+        self.y = deque([last] * (delay + 1), maxlen=delay + 1)
 
     def control(self, target, sensor):
         '''apply PID control
         @param target: reference values
         @param sensor: current values from sensor
-        @return control signal
+        @return control signal (joint speeds)
         '''
-        # YOUR CODE HERE
+        target = np.asarray(target, dtype=float)
+        sensor = np.asarray(sensor, dtype=float)
+
+        # initialise prediction buffer with the current sensor reading
+        if len(self.y) == 0:
+            self.y.append(sensor.copy())
+
+        # predicted joint angle used for control (accounts for communication delay)
+        # if delay == 0 this is simply the latest sensor reading
+        y_pred = self.y[-1] if self.delay > 0 else sensor
+
+        # current control error
+        e = target - y_pred
+
+        # incremental discrete PID:
+        # u[k] = u[k-1] + Kp*(e[k]-e[k-1]) + Ki*dt*e[k] + Kd/dt*(e[k]-2e[k-1]+e[k-2])
+        du = (
+            self.Kp * (e - self.e1) +
+            self.Ki * self.dt * e +
+            self.Kd / self.dt * (e - 2.0 * self.e1 + self.e2)
+        )
+        self.u = self.u + du
+
+        # update prediction buffer using simple motor model: angle(t)=angle(t-1)+speed*dt
+        y_new = y_pred + self.u * self.dt
+        self.y.append(y_new)
+
+        # shift stored errors
+        self.e2 = self.e1
+        self.e1 = e
 
         return self.u
 

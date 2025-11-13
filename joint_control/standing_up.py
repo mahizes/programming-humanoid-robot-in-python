@@ -7,6 +7,7 @@
 
 
 from recognize_posture import PostureRecognitionAgent
+from keyframes import leftBackToStand, rightBackToStand, leftBellyToStand, rightBellyToStand
 
 
 class StandingUpAgent(PostureRecognitionAgent):
@@ -16,7 +17,39 @@ class StandingUpAgent(PostureRecognitionAgent):
 
     def standing_up(self):
         posture = self.posture
-        # YOUR CODE HERE
+        # if posture is unknown or already standing, do nothing
+        if posture in ('unknown', 'Stand', 'StandInit'):
+            return
+
+        # avoid restarting the same recovery motion every cycle
+        if getattr(self, '_current_recovery_posture', None) == posture:
+            return
+
+        # use IMU to decide left/right variant (AngleX), see robot_pose_data description
+        imu = getattr(self.perception, 'imu', [0.0, 0.0])
+        angle_x = imu[0]
+
+        keyframes = None
+
+        if posture == 'Back':
+            # lying on the back
+            keyframes = rightBackToStand() if angle_x >= 0 else leftBackToStand()
+        elif posture == 'Belly':
+            # lying on the belly
+            keyframes = rightBellyToStand() if angle_x >= 0 else leftBellyToStand()
+        elif posture == 'Left':
+            keyframes = leftBackToStand()
+        elif posture == 'Right':
+            keyframes = rightBackToStand()
+
+        # for other postures (Sit, Knee, Crouch, Frog, HeadBack, ...) we do nothing here
+
+        if keyframes is not None:
+            # trigger the selected recovery motion
+            self.keyframes = keyframes
+            # restart time for angle interpolation
+            self.motion_start_time = None
+            self._current_recovery_posture = posture
 
 
 class TestStandingUpAgent(StandingUpAgent):
